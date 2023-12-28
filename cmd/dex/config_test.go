@@ -36,6 +36,7 @@ func TestValidConfiguration(t *testing.T) {
 				Config: &mock.CallbackConfig{},
 			},
 		},
+		AdditionalFeatures: server.ValidAdditionalFeatures,
 	}
 	if err := configuration.Validate(); err != nil {
 		t.Fatalf("this configuration should have been valid: %v", err)
@@ -126,6 +127,10 @@ expiry:
 logger:
   level: "debug"
   format: "json"
+
+additionalFeatures: [
+	"ConnectorsCRUD"
+]
 `)
 
 	want := Config{
@@ -213,6 +218,7 @@ logger:
 			Level:  "debug",
 			Format: "json",
 		},
+		AdditionalFeatures: server.ValidAdditionalFeatures,
 	}
 
 	var c Config
@@ -428,5 +434,14 @@ logger:
 	}
 	if diff := pretty.Compare(c, want); diff != "" {
 		t.Errorf("got!=want: %s", diff)
+	}
+}
+
+func TestParseConfig(t *testing.T) {
+	configuration := Config{}
+	configuration.Parse()
+
+	if configuration.AdditionalFeatures == nil || len(configuration.AdditionalFeatures) != 0 {
+		t.Fatal("AdditionalFeatures should be an empty slice")
 	}
 }

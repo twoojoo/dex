@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -49,10 +50,22 @@ type Config struct {
 	// querying the storage. Cannot be specified without enabling a passwords
 	// database.
 	StaticPasswords []password `json:"staticPasswords"`
+
+	// AdditionalFeature allow the extension of Dex functionalities
+	AdditionalFeatures []server.AdditionalFeature `json:"additionalFeatures"`
+}
+
+// Parse the configuration
+func (c *Config) Parse() {
+	if c.AdditionalFeatures == nil {
+		c.AdditionalFeatures = []server.AdditionalFeature{}
+	}
 }
 
 // Validate the configuration
 func (c Config) Validate() error {
+	invalidFeatures := c.findInvalidAdditionalFeatures()
+
 	// Fast checks. Perform these first for a more responsive CLI.
 	checks := []struct {
 		bad    bool
@@ -68,6 +81,7 @@ func (c Config) Validate() error {
 		{c.GRPC.TLSKey != "" && c.GRPC.Addr == "", "no address specified for gRPC"},
 		{(c.GRPC.TLSCert == "") != (c.GRPC.TLSKey == ""), "must specific both a gRPC TLS cert and key"},
 		{c.GRPC.TLSCert == "" && c.GRPC.TLSClientCA != "", "cannot specify gRPC TLS client CA without a gRPC TLS cert"},
+		{len(invalidFeatures) > 0, fmt.Sprintf("invalid additionalFeatures supplied: %v. Valid entries: %s", invalidFeatures, server.ValidAdditionalFeatures)},
 	}
 
 	var checkErrors []string
@@ -81,6 +95,22 @@ func (c Config) Validate() error {
 		return fmt.Errorf("invalid Config:\n\t-\t%s", strings.Join(checkErrors, "\n\t-\t"))
 	}
 	return nil
+}
+
+// findInvalidAdditionalFeatures returns additional features that are not considered valid
+func (c Config) findInvalidAdditionalFeatures() []server.AdditionalFeature {
+	if c.AdditionalFeatures == nil {
+		return []server.AdditionalFeature{}
+	}
+
+	badFeatures := []server.AdditionalFeature{}
+	for _, feature := range c.AdditionalFeatures {
+		if !slices.Contains(server.ValidAdditionalFeatures, feature) {
+			badFeatures = append(badFeatures, feature)
+		}
+	}
+
+	return badFeatures
 }
 
 type password storage.Password
