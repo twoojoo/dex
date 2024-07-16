@@ -16,22 +16,21 @@ on:
     outputs:
       container-image-name:
         description: Container image name
-        value: ${{ jobs.container-image.outputs.name }}
+        value: ${{ jobs.container-images.outputs.name }}
       container-image-digest:
         description: Container image digest
-        value: ${{ jobs.container-image.outputs.digest }}
+        value: ${{ jobs.container-images.outputs.digest }}
       container-image-ref:
         description: Container image ref
-        value: ${{ jobs.container-image.outputs.ref }}
+        value: ${{ jobs.container-images.outputs.ref }}
 
 permissions:
   contents: read
 
 jobs:
-  container-image:
-    name: Container image
+  container-images:
+    name: Container images
     runs-on: ubuntu-latest
-
     strategy:
       matrix:
         variant:
@@ -39,10 +38,12 @@ jobs:
           - distroless
 
     permissions:
+      attestations: write
       contents: read
       packages: write
       id-token: write
       security-events: write
+
 
     outputs:
       name: ${{ steps.image-name.outputs.value }}
@@ -51,16 +52,19 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+        uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # v4.1.7
 
       - name: Set up QEMU
-        uses: docker/setup-qemu-action@68827325e0b33c7199eb31dd4e31fbe9023e06e3 # v3.0.0
+        uses: docker/setup-qemu-action@5927c834f5b4fdf503fca6f4c7eccda82949e1ee # v3.1.0
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@f95db51fddba0c2d1ec667646a06c2ce06100226 # v3.0.0
+        uses: docker/setup-buildx-action@d70bba72b1f3fd22344832f00baa16ece964efeb # v3.3.0
 
       - name: Set up Syft
-        uses: anchore/sbom-action/download-syft@5ecf649a417b8ae17dc8383dc32d46c03f2312df # v0.15.1
+        uses: anchore/sbom-action/download-syft@e8d2a6937ecead383dfe75190d104edd1f9c5751 # v0.16.0
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@59acb6260d9c0ba8f4a2f9d9b48431a222b68e20 # v3.5.0
 
       - name: Set image name
         id: image-name
@@ -68,7 +72,7 @@ jobs:
 
       - name: Gather build metadata
         id: meta
-        uses: docker/metadata-action@96383f45573cb7f253c731d3b3ab81c87ef81934 # v5.0.0
+        uses: docker/metadata-action@8e5442c4ef9f78752691e2d8f8d19755c6f78e81 # v5.5.1
         with:
           images: |
             ${{ steps.image-name.outputs.value }}
@@ -90,7 +94,7 @@ jobs:
       # Multiple exporters are not supported yet
       # See https://github.com/moby/buildkit/pull/2760
       - name: Determine build output
-        uses: haya14busa/action-cond@1d6e8a12b20cdb4f1954feef9aa475b9c390cab5 # v1.1.1
+        uses: haya14busa/action-cond@94f77f7a80cd666cb3155084e428254fea4281fd # v1.2.1
         id: build-output
         with:
           cond: ${{ inputs.publish }}
@@ -98,7 +102,7 @@ jobs:
           if_false: type=oci,dest=image.tar
 
       - name: Login to GitHub Container Registry
-        uses: docker/login-action@343f7c4344506bcbf9b4de18042ae17996df046d # v3.0.0
+        uses: docker/login-action@0d4c9c5ea7693da7b068278f7b52bda2a190a446 # v3.2.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -106,7 +110,7 @@ jobs:
         if: inputs.publish
 
       - name: Login to Docker Hub
-        uses: docker/login-action@343f7c4344506bcbf9b4de18042ae17996df046d # v3.0.0
+        uses: docker/login-action@0d4c9c5ea7693da7b068278f7b52bda2a190a446 # v3.2.0
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
@@ -114,10 +118,10 @@ jobs:
 
       - name: Build and push image
         id: build
-        uses: docker/build-push-action@4a13e500e55cf31b7a5d59a38ab2040ab0f42f56 # v5.1.0
+        uses: docker/build-push-action@1a162644f9a7e87d8f4b053101d1d9a712edc18c # v6.3.0
         with:
           context: .
-          platforms: linux/amd64,linux/arm/v7,linux/arm64,linux/ppc64le
+          platforms: linux/amd64,linux/arm/v7,linux/arm64,linux/ppc64le,linux/s390x
           tags: ${{ steps.meta.outputs.tags }}
           build-args: |
             BASE_IMAGE=${{ matrix.variant }}
@@ -129,6 +133,11 @@ jobs:
           # cache-to: type=gha,mode=max
           outputs: ${{ steps.build-output.outputs.value }}
           # push: ${{ inputs.publish }}
+
+      - name: Sign the images with GitHub OIDC Token
+        run: |
+          cosign sign --yes ${{ steps.image-name.outputs.value }}@${{ steps.build.outputs.digest }}
+        if: inputs.publish
 
       - name: Set image ref
         id: image-ref
@@ -167,8 +176,24 @@ jobs:
       #     path: sbom-spdx.json
       #     retention-days: 5
 
+      # TODO: uncomment when the action is working for non ghcr.io pushes. GH Issue: https://github.com/actions/attest-build-provenance/issues/80
+      # - name: Generate build provenance attestation
+      #   uses: actions/attest-build-provenance@5e9cb68e95676991667494a6a4e59b8a2f13e1d0 # v1.3.3
+      #   with:
+      #     subject-name: dexidp/dex
+      #     subject-digest: ${{ steps.build.outputs.digest }}
+      #     push-to-registry: true
+
+      - name: Generate build provenance attestation
+        uses: actions/attest-build-provenance@5e9cb68e95676991667494a6a4e59b8a2f13e1d0 # v1.3.3
+        with:
+          subject-name: ghcr.io/dexidp/dex
+          subject-digest: ${{ steps.build.outputs.digest }}
+          push-to-registry: true
+        if: inputs.publish
+
       - name: Run Trivy vulnerability scanner
-        uses: aquasecurity/trivy-action@91713af97dc80187565512baba96e4364e983601 # 0.16.0
+        uses: aquasecurity/trivy-action@6e7b7d1fd3e4fef0c5fa8cce1229c54b2c9bd0d8 # 0.24.0
         with:
           input: image
           format: sarif
@@ -182,6 +207,6 @@ jobs:
           retention-days: 5
 
       - name: Upload Trivy scan results to GitHub Security tab
-        uses: github/codeql-action/upload-sarif@012739e5082ff0c22ca6d6ab32e07c36df03c4a4 # v3.22.12
+        uses: github/codeql-action/upload-sarif@4fa2a7953630fd2f3fb380f21be14ede0169dd4f # v3.25.12
         with:
           sarif_file: trivy-results.sarif

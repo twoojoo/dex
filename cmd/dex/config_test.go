@@ -1,6 +1,7 @@
 package main
 
 import (
+	"log/slog"
 	"os"
 	"testing"
 
@@ -76,7 +77,11 @@ storage:
     connMaxLifetime: 30
     connectionTimeout: 3
 web:
-  http: 127.0.0.1:5556
+  https: 127.0.0.1:5556
+  tlsMinVersion: 1.3
+  tlsMaxVersion: 1.2
+  headers:
+    Strict-Transport-Security: "max-age=31536000; includeSubDomains"
 
 frontend:
   dir: ./web
@@ -153,7 +158,12 @@ additionalFeatures: [
 			},
 		},
 		Web: Web{
-			HTTP: "127.0.0.1:5556",
+			HTTPS:         "127.0.0.1:5556",
+			TLSMinVersion: "1.3",
+			TLSMaxVersion: "1.2",
+			Headers: Headers{
+				StrictTransportSecurity: "max-age=31536000; includeSubDomains",
+			},
 		},
 		Frontend: server.WebConfig{
 			Dir: "./web",
@@ -219,7 +229,7 @@ additionalFeatures: [
 			DeviceRequests: "10m",
 		},
 		Logger: Logger{
-			Level:  "debug",
+			Level:  slog.LevelDebug,
 			Format: "json",
 		},
 		AdditionalFeatures: server.ValidAdditionalFeatures,
@@ -430,7 +440,7 @@ logger:
 			AuthRequests: "25h",
 		},
 		Logger: Logger{
-			Level:  "debug",
+			Level:  slog.LevelDebug,
 			Format: "json",
 		},
 	}

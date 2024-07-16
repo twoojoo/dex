@@ -2,18 +2,17 @@ package server
 
 import (
 	"context"
+	"io"
+	"log/slog"
 	"net"
-	"os"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
 	"github.com/dexidp/dex/api/v2"
-	"github.com/dexidp/dex/pkg/log"
 	"github.com/dexidp/dex/server/internal"
 	"github.com/dexidp/dex/storage"
 	"github.com/dexidp/dex/storage/memory"
@@ -31,7 +30,7 @@ type apiClient struct {
 }
 
 // newAPI constructs a gRCP client connected to a backing server.
-func newAPI(s storage.Storage, logger log.Logger, t *testing.T, addtionalFeatures []AdditionalFeature) *apiClient {
+func newAPI(s storage.Storage, logger *slog.Logger, t *testing.T, addtionalFeatures []AdditionalFeature) *apiClient {
 	l, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
@@ -41,9 +40,9 @@ func newAPI(s storage.Storage, logger log.Logger, t *testing.T, addtionalFeature
 	api.RegisterDexServer(serv, NewAPI(s, logger, "test", addtionalFeatures))
 	go serv.Serve(l)
 
-	// Dial will retry automatically if the serv.Serve() goroutine
+	// NewClient will retry automatically if the serv.Serve() goroutine
 	// hasn't started yet.
-	conn, err := grpc.Dial(l.Addr().String(), grpc.WithTransportCredentials(insecure.NewCredentials()))
+	conn, err := grpc.NewClient(l.Addr().String(), grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -60,11 +59,7 @@ func newAPI(s storage.Storage, logger log.Logger, t *testing.T, addtionalFeature
 
 // Attempts to create, update and delete a test Password
 func TestPassword(t *testing.T) {
-	logger := &logrus.Logger{
-		Out:       os.Stderr,
-		Formatter: &logrus.TextFormatter{DisableColors: true},
-		Level:     logrus.DebugLevel,
-	}
+	logger := slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{}))
 
 	s := memory.New(logger)
 	client := newAPI(s, logger, t, []AdditionalFeature{})
@@ -173,11 +168,7 @@ func TestPassword(t *testing.T) {
 
 // Ensures checkCost returns expected values
 func TestCheckCost(t *testing.T) {
-	logger := &logrus.Logger{
-		Out:       os.Stderr,
-		Formatter: &logrus.TextFormatter{DisableColors: true},
-		Level:     logrus.DebugLevel,
-	}
+	logger := slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{}))
 
 	s := memory.New(logger)
 	client := newAPI(s, logger, t, []AdditionalFeature{})
@@ -230,11 +221,7 @@ func TestCheckCost(t *testing.T) {
 
 // Attempts to list and revoke an existing refresh token.
 func TestRefreshToken(t *testing.T) {
-	logger := &logrus.Logger{
-		Out:       os.Stderr,
-		Formatter: &logrus.TextFormatter{DisableColors: true},
-		Level:     logrus.DebugLevel,
-	}
+	logger := slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{}))
 
 	s := memory.New(logger)
 	client := newAPI(s, logger, t, []AdditionalFeature{})
@@ -263,7 +250,7 @@ func TestRefreshToken(t *testing.T) {
 		ConnectorData: []byte(`{"some":"data"}`),
 	}
 
-	if err := s.CreateRefresh(r); err != nil {
+	if err := s.CreateRefresh(ctx, r); err != nil {
 		t.Fatalf("create refresh token: %v", err)
 	}
 
@@ -281,7 +268,7 @@ func TestRefreshToken(t *testing.T) {
 	}
 	session.Refresh[tokenRef.ClientID] = &tokenRef
 
-	if err := s.CreateOfflineSessions(session); err != nil {
+	if err := s.CreateOfflineSessions(ctx, session); err != nil {
 		t.Fatalf("create offline session: %v", err)
 	}
 
@@ -343,11 +330,7 @@ func TestRefreshToken(t *testing.T) {
 }
 
 func TestUpdateClient(t *testing.T) {
-	logger := &logrus.Logger{
-		Out:       os.Stderr,
-		Formatter: &logrus.TextFormatter{DisableColors: true},
-		Level:     logrus.DebugLevel,
-	}
+	logger := slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{}))
 
 	s := memory.New(logger)
 	client := newAPI(s, logger, t, []AdditionalFeature{})
@@ -510,11 +493,7 @@ func find(item string, items []string) bool {
 }
 
 func TestCreateConnector(t *testing.T) {
-	logger := &logrus.Logger{
-		Out:       os.Stderr,
-		Formatter: &logrus.TextFormatter{DisableColors: true},
-		Level:     logrus.DebugLevel,
-	}
+	logger := slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{}))
 
 	s := memory.New(logger)
 	client := newAPI(s, logger, t, []AdditionalFeature{ConnectorsCRUD})
@@ -561,11 +540,7 @@ func TestCreateConnector(t *testing.T) {
 }
 
 func TestUpdateConnector(t *testing.T) {
-	logger := &logrus.Logger{
-		Out:       os.Stderr,
-		Formatter: &logrus.TextFormatter{DisableColors: true},
-		Level:     logrus.DebugLevel,
-	}
+	logger := slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{}))
 
 	s := memory.New(logger)
 	client := newAPI(s, logger, t, []AdditionalFeature{ConnectorsCRUD})
@@ -630,11 +605,7 @@ func TestUpdateConnector(t *testing.T) {
 }
 
 func TestDeleteConnector(t *testing.T) {
-	logger := &logrus.Logger{
-		Out:       os.Stderr,
-		Formatter: &logrus.TextFormatter{DisableColors: true},
-		Level:     logrus.DebugLevel,
-	}
+	logger := slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{}))
 
 	s := memory.New(logger)
 	client := newAPI(s, logger, t, []AdditionalFeature{ConnectorsCRUD})
@@ -675,11 +646,7 @@ func TestDeleteConnector(t *testing.T) {
 }
 
 func TestListConnectors(t *testing.T) {
-	logger := &logrus.Logger{
-		Out:       os.Stderr,
-		Formatter: &logrus.TextFormatter{DisableColors: true},
-		Level:     logrus.DebugLevel,
-	}
+	logger := slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{}))
 
 	s := memory.New(logger)
 	client := newAPI(s, logger, t, []AdditionalFeature{ConnectorsCRUD})
@@ -719,11 +686,7 @@ func TestListConnectors(t *testing.T) {
 }
 
 func TestMissingAdditionalFeature(t *testing.T) {
-	logger := &logrus.Logger{
-		Out:       os.Stderr,
-		Formatter: &logrus.TextFormatter{DisableColors: true},
-		Level:     logrus.DebugLevel,
-	}
+	logger := slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{}))
 
 	s := memory.New(logger)
 	client := newAPI(s, logger, t, []AdditionalFeature{})
